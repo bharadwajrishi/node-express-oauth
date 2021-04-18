@@ -55,78 +55,87 @@ app.use(bodyParser.urlencoded({ extended: true }))
 Your code here
 */
 app.get('/authorize', (req, res) => {
-	const client = clients.find(c => c == req.params.client_id);
-	if(client == 'undefined'){
+	const clientId = req.query.client_id;
+	const client = clients[clientId];
+	if(!client){
 		return res.status(401).send();
 	}
-	const currentScopes = req.query.scope.split(" ")
-	const hasScope = utils.containsAll(client.scopes, currentScopes);
-	if(!hasScope) return res.statusCode(401).send();
 
-	const key = utils.randomString();
-	const value = req.query;
+	if(
+		typeof req.query.scope !== "string" ||
+		!containsAll(client.scopes, req.query.scope.split(" "))
+	){
+		return res.statusCode(401).send();
+	}
 
-	const requestId = [];
-	requestId.push({
-		key: value
-	});
+	const requestId = randomString();
+	requests[requestId] = req.query;
 
-	var params = [];
-	params.push(
-		{ 'client': client  },
-		{ 'scope': req.query.scope },
-		{ 'requestId':  requestId });
-	res.render('login', )
-	res.status(200).send();
-	res.end();
+	res.render('login', {
+		client,
+		scope: req.query.scope,
+		requestId,
+	})
 });
 
 app.post('approve', (req, res) => {
-	const currentUserName = req.body['username'];
-	const currentPassword = req.body['password'];
+	const { username, password, requestId } = req.body;
 
-	const currentUser = users.find(u => u == currentUserName);
-	if(!currentUser ||  users[currentUser] != currentPassword) 
-		return res.status(401).send();
+	if(!username ||  users[username] != password) 
+		return res.status(401).send("Error: user not authorized");
 
-	const request = requests[req.body.requestId];
-	if(!request) return res.status(401).send();
+	const clientReq = requests[requestId];
+	delete requests[requestId];
+	if(!clientReq) return res.status(401).send("Error: Invalid user request");
 
-	const authCodeValue = {
-		'clientReq': request,
-		'userName': currentUserName,
-	};
+	const authCode = randomString();
+	authorizationCodes[authCode] = { clientReq, username };
 
-	const authCode = utils.randomString();
-	authorizationCodes.push({
-		authCode : authCodeValue
-	});
-
-	res.redirect(request.redirectUri +'?code=' + authCode + '&state=' + request.state);
+	const redirectUri = url.parse(clientReq.redirectUri);
+	redirectUri.query = {
+		code,
+		state: clientReq.state,
+	}
+	res.redirect(url.format(redirectUri));
 });
 
 app.post('/token', (req, res) => {
-	if(!req.headers.authorization) return res.status(401).send();
-	const decodedAuthCode = utils.decodeAuthCredentials(req.headers.authorization);
+	let authCredentials = req.headers.authorization;
+	if(!authCredentials) return res.status(401).send();
+	const {clientId, clientSecret} = decodeAuthCredentials(rauthCredentials);
 
-	const client = clients.find(c => c == decodedAuthCode.clientId);
-	if(!client || client.clientSecret != decodedAuthCode.clientSecret)
+	const client = clients[clientId];
+	if(!client || client.clientSecret != clientSecret)
 		return res.status(401).send();
 	
-	const obj = authorizationCodes[req.body.code];
-	if(obj == 'undefined'){
-		res.status(401).send();
-	}else{
-		delete authorizationCodes[req.body.code];
+	const code = req.body.code;
+	if(!code ||  authorizationCodes[code]){
+		return es.status(401).send();
 	}
+	const { clientReq, userName } = authorizationCodes[code];
+	delete authorizationCodes[req.body.code];
 
 	const userName = obj.userName;
 	const scope = obj.clientReq.scope;
 	var privateKey = fs.readFileSync('/assets/private_key.pem');
-	var token = jwt.sign({ userName : scope }, privateKey, { algorithm: 'RS256' });
-	res.status(201).json(
-		{ "access_token" : token },
-		{ "token_type" : 'Bearer' },
+	var token = jwt.sign(
+		{ 
+			userName, 
+			scope: clientReq.scope 
+		}, 
+		config.privateKey, 
+		{ 
+			algorithm: 'RS256',
+			expiresIn: 300,
+			issuer: "http://localhost:" + config.port,
+		}
+	);
+	res.json(
+		{
+			access_token: token,
+			token_type: "Bearer",
+			scope: clientReq.scope
+		}
 	);
 });
 
