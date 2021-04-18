@@ -2,7 +2,7 @@ const fs = require("fs")
 const express = require("express")
 const bodyParser = require("body-parser")
 const jwt = require("jsonwebtoken")
-const utils = require("utils")
+const utils = require("./utils")
 const {
 	randomString,
 	containsAll,
@@ -58,17 +58,19 @@ app.get('/authorize', (req, res) => {
 	const clientId = req.query.client_id;
 	const client = clients[clientId];
 	if(!client){
-		return res.status(401).send();
+		res.status(401).send();
+		return;
 	}
 
 	if(
 		typeof req.query.scope !== "string" ||
-		!containsAll(client.scopes, req.query.scope.split(" "))
+		!utils.containsAll(client.scopes, req.query.scope.split(" "))
 	){
-		return res.statusCode(401).send();
+		 res.statusCode(401).send("401 unauthorized");
+		 return
 	}
 
-	const requestId = randomString();
+	const requestId = utils.randomString();
 	requests[requestId] = req.query;
 
 	res.render('login', {
@@ -81,12 +83,16 @@ app.get('/authorize', (req, res) => {
 app.post('approve', (req, res) => {
 	const { username, password, requestId } = req.body;
 
-	if(!username ||  users[username] != password) 
-		return res.status(401).send("Error: user not authorized");
-
+	if(!username ||  users[username] != password) {
+		res.status(401).send("Error: user not authorized");
+		return
+	}
 	const clientReq = requests[requestId];
 	delete requests[requestId];
-	if(!clientReq) return res.status(401).send("Error: Invalid user request");
+	if(!clientReq) {
+		res.status(401).send("Error: Invalid user request");
+		return;
+	} 
 
 	const authCode = randomString();
 	authorizationCodes[authCode] = { clientReq, username };
@@ -101,26 +107,31 @@ app.post('approve', (req, res) => {
 
 app.post('/token', (req, res) => {
 	let authCredentials = req.headers.authorization;
-	if(!authCredentials) return res.status(401).send();
-	const {clientId, clientSecret} = decodeAuthCredentials(rauthCredentials);
+	if(!authCredentials){
+		res.status(401).send();
+		return;
+	} 
+	const {clientId, clientSecret} = utils.decodeAuthCredentials(rauthCredentials);
 
 	const client = clients[clientId];
-	if(!client || client.clientSecret != clientSecret)
-		return res.status(401).send();
-	
+	if(!client || client.clientSecret != clientSecret){
+		res.status(401).send();
+		return;
+	}
 	const code = req.body.code;
 	if(!code ||  authorizationCodes[code]){
-		return es.status(401).send();
+		es.status(401).send();
+		return 
 	}
 	const { clientReq, userName } = authorizationCodes[code];
 	delete authorizationCodes[req.body.code];
 
-	const userName = obj.userName;
+	const username = obj.userName;
 	const scope = obj.clientReq.scope;
 	var privateKey = fs.readFileSync('/assets/private_key.pem');
 	var token = jwt.sign(
 		{ 
-			userName, 
+			username, 
 			scope: clientReq.scope 
 		}, 
 		config.privateKey, 
