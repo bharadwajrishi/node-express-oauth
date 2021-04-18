@@ -93,7 +93,7 @@ app.post("/approve", (req, res) => {
 		code,
 		state: clientReq.state,
 	}
-	res.redirect(url.format(redirectUri))
+	res.status(302).redirect(url.format(redirectUri))
 })
 
 app.post("/token", (req, res) => {
