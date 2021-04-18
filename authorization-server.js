@@ -80,7 +80,7 @@ app.get('/authorize', (req, res) => {
 	})
 });
 
-app.post('approve', (req, res) => {
+app.post('/approve', (req, res) => {
 	const { username, password, requestId } = req.body;
 
 	if(!username ||  users[username] != password) {
