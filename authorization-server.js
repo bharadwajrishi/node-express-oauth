@@ -51,104 +51,88 @@ app.use(timeout)
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
-/*
-Your code here
-*/
-app.get('/authorize', (req, res) => {
-	const clientId = req.query.client_id;
-	const client = clients[clientId];
-	if(!client){
-		res.status(401).send();
-		return;
+app.get("/authorize", (req, res) => {
+	const clientId = req.query.client_id
+	const client = clients[clientId]
+	if (!client) {
+		res.status(401).send("Error: client not authorized")
+		return
 	}
-
-	if(
+	if (
 		typeof req.query.scope !== "string" ||
-		!utils.containsAll(client.scopes, req.query.scope.split(" "))
-	){
-		 res.statusCode(401).send("Error: Invalid scope requested");
-		 return
+		!containsAll(client.scopes, req.query.scope.split(" "))
+	) {
+		res.status(401).send("Error: invalid scopes requested")
+		return
 	}
-
-	const requestId = utils.randomString();
+	const requestId = randomString();
 	requests[requestId] = req.query;
-
-	res.render('login', {
+	res.render("login", {
 		client,
 		scope: req.query.scope,
 		requestId,
 	})
-});
+})
 
-app.post('/approve', (req, res) => {
-	const { username, password, requestId } = req.body;
-
-	if(!username ||  users[username] != password) {
-		res.status(401).send("Error: user not authorized");
+app.post("/approve", (req, res) => {
+	const { userName, password, requestId } = req.body
+	if (!userName || users[userName] !== password) {
+		res.status(401).send("Error: user not authorized")
 		return
 	}
-	const clientReq = requests[requestId];
-	delete requests[requestId];
-	if(!clientReq) {
-		res.status(401).send("Error: Invalid user request");
-		return;
-	} 
-
-	const authCode = randomString();
-	authorizationCodes[authCode] = { clientReq, username };
-
-	const redirectUri = url.parse(clientReq.redirectUri);
+	const clientReq = requests[requestId]
+	delete requests[requestId]
+	if (!clientReq) {
+		res.status(401).send("Error: invalid user request")
+		return
+	}
+	const code = randomString()
+	authorizationCodes[code] = { clientReq, userName }
+	const redirectUri = url.parse(clientReq.redirect_uri)
 	redirectUri.query = {
 		code,
 		state: clientReq.state,
 	}
-	return res.statusCode(200).redirect(url.format(redirectUri));
-});
+	res.redirect(url.format(redirectUri))
+})
 
-app.post('/token', (req, res) => {
-	let authCredentials = req.headers.authorization;
-	if(!authCredentials){
-		res.status(401).send();
-		return;
-	} 
-	const {clientId, clientSecret} = utils.decodeAuthCredentials(rauthCredentials);
-
-	const client = clients[clientId];
-	if(!client || client.clientSecret != clientSecret){
-		res.status(401).send();
-		return;
+app.post("/token", (req, res) => {
+	let authCredentials = req.headers.authorization
+	if (!authCredentials) {
+		res.status(401).send("Error: not authorized")
+		return
 	}
-	const code = req.body.code;
-	if(!code ||  authorizationCodes[code]){
-		es.status(401).send();
-		return 
+	const { clientId, clientSecret } = decodeAuthCredentials(authCredentials)
+	const client = clients[clientId]
+	if (!client || client.clientSecret !== clientSecret) {
+		res.status(401).send("Error: client not authorized")
+		return
 	}
-	const { clientReq, userName } = authorizationCodes[code];
-	delete authorizationCodes[req.body.code];
-
-	const username = obj.userName;
-	const scope = obj.clientReq.scope;
-	var privateKey = fs.readFileSync('/assets/private_key.pem');
-	var token = jwt.sign(
-		{ 
-			username, 
-			scope: clientReq.scope 
-		}, 
-		config.privateKey, 
-		{ 
-			algorithm: 'RS256',
+	const code = req.body.code
+	if (!code || !authorizationCodes[code]) {
+		res.status(401).send("Error: invalid code")
+		return
+	}
+	const { clientReq, userName } = authorizationCodes[code]
+	delete authorizationCodes[code]
+	const token = jwt.sign(
+		{
+			userName,
+			scope: clientReq.scope,
+		},
+		config.privateKey,
+		{
+			algorithm: "RS256",
 			expiresIn: 300,
 			issuer: "http://localhost:" + config.port,
 		}
-	);
-	res.json(
-		{
-			access_token: token,
-			token_type: "Bearer",
-			scope: clientReq.scope
-		}
-	);
-});
+	)
+	res.json({
+		access_token: token,
+		token_type: "Bearer",
+		scope: clientReq.scope,
+	})
+})
 
 const server = app.listen(config.port, "localhost", function () {
 	var host = server.address().address
