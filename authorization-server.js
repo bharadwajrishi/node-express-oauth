@@ -66,7 +66,7 @@ app.get('/authorize', (req, res) => {
 		typeof req.query.scope !== "string" ||
 		!utils.containsAll(client.scopes, req.query.scope.split(" "))
 	){
-		 res.statusCode(401).send("401 unauthorized");
+		 res.statusCode(401).send("Error: Invalid scope requested");
 		 return
 	}
 
