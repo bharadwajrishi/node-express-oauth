@@ -54,7 +54,7 @@ app.use(bodyParser.urlencoded({ extended: true }))
 /*
 Your code here
 */
-app.get('/authorize/:client_id', (req, res) => {
+app.get('/authorize', (req, res) => {
 	const client = clients.find(c => c == req.params.client_id);
 	if(client == 'undefined'){
 		return res.status(401).send();
